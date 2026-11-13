@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Latihan Olimpiade Matematika SD</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Baloo 2',system-ui,sans-serif;background:linear-gradient(135deg,#fef9c3,#e0f2fe 50%,#fce7f3);min-height:100vh}
+  .step{opacity:0;transform:translateY(-10px);animation:in .6s ease forwards}
+  @keyframes in{to{opacity:1;transform:none}}
+  .langkah b{background:#fde047;padding:0 5px;border-radius:6px;color:#7c2d12}
+  .fr{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:1.05;font-size:.85em;margin:0 2px}
+  .fr i{font-style:normal;padding:0 3px}.fr i:first-child{border-bottom:2px solid currentColor}
+  .tbl{margin:8px auto;border-collapse:collapse}.tbl th,.tbl td{border:2px solid #7dd3fc;padding:4px 14px;text-align:center}.tbl th{background:#e0f2fe}
+  .pop{animation:pop .3s ease}@keyframes pop{0%{transform:scale(.95)}100%{transform:scale(1)}}
+  .dt{width:100%;border-collapse:collapse;font-size:.9rem}.dt th,.dt td{border-bottom:1px solid #e2e8f0;padding:6px 8px;text-align:left}.dt th{background:#f1f5f9}
+</style>
+</head>
+<body class="text-slate-800">
+<header class="bg-white/80 backdrop-blur sticky top-0 z-10 shadow">
+  <div class="max-w-3xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+    <button onclick="beranda()" class="text-xl sm:text-2xl font-extrabold text-indigo-600"><i class="fa-solid fa-star text-yellow-400"></i> MatematikaKu</button>
+    <nav class="flex flex-wrap gap-2 text-sm font-bold">
+      <button onclick="beranda()" class="px-3 py-1 rounded-full bg-pink-300 hover:bg-pink-400"><i class="fa-solid fa-house"></i> Beranda</button>
+      <button onclick="need(belajar)" class="px-3 py-1 rounded-full bg-amber-300 hover:bg-amber-400">Belajar</button>
+      <button onclick="need(menuLatihan)" class="px-3 py-1 rounded-full bg-sky-300 hover:bg-sky-400">Latihan</button>
+      <button onclick="guru()" class="px-3 py-1 rounded-full bg-slate-300 hover:bg-slate-400"><i class="fa-solid fa-user-tie"></i> Guru</button>
+    </nav>
+  </div>
+</header>
+<main id="app" class="max-w-3xl mx-auto p-4"></main>
+
+<script src="soal.js"></script>
+<script>
+const app = document.getElementById('app');
+const fmt = s => s.replace(/(\d+)\/(\d+)/g, '<span class="fr"><i>$1</i><i>$2</i></span>');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const L = ['A','B','C','D'];
+const KODE_LOKAL = '87654321';           // dipakai hanya pada mode lokal; mode cloud diperiksa di server
+const WARNA = ['bg-rose-100 text-rose-700','bg-orange-100 text-orange-700','bg-lime-100 text-lime-700','bg-amber-100 text-amber-700','bg-sky-100 text-sky-700','bg-violet-100 text-violet-700','bg-teal-100 text-teal-700','bg-pink-100 text-pink-700'];
+const badge = t => `<span class="text-xs font-bold px-2 py-1 rounded-full ${WARNA[t]}">${TOPIK[t]}</span>`;
+const visual = q => (q.image_url ? `<img src="${q.image_url}" class="mx-auto my-2 max-h-48">` : '') + (q.visual ? `<div class="my-3 overflow-x-auto">${q.visual}</div>` : '');
+const card = h => `<div class="bg-white rounded-3xl shadow-lg p-5 mb-5 pop">${h}</div>`;
+const go = h => { app.innerHTML = h; window.scrollTo({top:0,behavior:'smooth'}); };
+const tgl = t => t ? new Date(t).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'}) : '-';
+
+/* ===== PENYIMPANAN: cloud (Netlify Blobs) bila tersedia, jika tidak localStorage ===== */
+let MODE = 'local', U = null, A = null;
+const norm = n => n.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+async function api(b) { const r = await fetch('/api', { method:'POST', body: JSON.stringify(b) }); if (!r.ok) throw new Error(r.status); return r.json(); }
+async function loadSiswa(n) {
+  if (MODE === 'cloud') { try { const d = await api({act:'get', nama:n}); if (d) return d; } catch(e) {} }
+  return JSON.parse(localStorage.getItem('s_' + norm(n)) || 'null');
+}
+async function saveSiswa() {
+  localStorage.setItem('s_' + norm(U.nama), JSON.stringify(U));
+  if (MODE === 'cloud') { try { await api({act:'save', nama:U.nama, data:U}); } catch(e) { console.warn('Gagal simpan ke server', e); } }
+}
+
+/* ===== SKOR & ANALISIS: benar +4, salah −1 ===== */
+const hitung = a => {
+  const s = PAKET[a.p].soal; let benar = 0, salah = 0;
+  s.forEach((q, i) => { if (a.jaw[i] == null) return; a.jaw[i] === q.jawaban_benar ? benar++ : salah++; });
+  return { benar, salah, skor: benar * 4 - salah };
+};
+const kesalahan = a => PAKET[a.p].soal.map((q, i) => a.jaw[i] != null && a.jaw[i] !== q.jawaban_benar ? { no:i+1, topik:q.topik, pil:a.jaw[i], kunci:q.jawaban_benar } : null).filter(Boolean);
+const statTopik = a => { const st = TOPIK.map(() => ({b:0,t:0})); PAKET[a.p].soal.forEach((q,i) => { st[q.topik].t++; if (a.jaw[i] === q.jawaban_benar) st[q.topik].b++; }); return st; };
+const lemahTopik = a => statTopik(a).map((s,i) => s.t && s.b/s.t < .7 ? TOPIK[i] : null).filter(Boolean);
+
+/* ===== MASUK / BERANDA ===== */
+function need(fn) { U ? fn() : beranda(); }
+function beranda() {
+  if (!U) return go(card(`<div class="text-center"><div class="text-6xl mb-2">🧮🏆</div>
+    <h1 class="text-2xl sm:text-3xl font-extrabold text-indigo-700">Latihan Olimpiade Matematika</h1>
+    <p class="text-slate-600 mb-4">SD/MI Kelas 5–6 · Kategori C</p>
+    <label class="font-bold block mb-1">Tulis namamu dulu ya:</label>
+    <input id="nm" value="${esc(localStorage.getItem('nama_terakhir')||'')}" maxlength="40" placeholder="Nama lengkap" class="border-4 border-sky-200 rounded-2xl px-4 py-2 w-full max-w-xs text-center text-lg" onkeydown="if(event.key==='Enter')masuk()">
+    <div><button onclick="masuk()" class="mt-4 px-8 py-3 rounded-full bg-indigo-500 text-white font-extrabold text-lg hover:bg-indigo-600">Masuk <i class="fa-solid fa-arrow-right"></i></button></div>
+    <p class="text-xs text-slate-500 mt-3">Pakai nama yang sama setiap kali agar kemajuanmu tersimpan.</p></div>`));
+  const sel = U.att.filter(a => a.done).length, aktif = U.att.filter(a => !a.done).length;
+  go(`<div class="text-center py-4"><div class="text-5xl">👋</div>
+    <h1 class="text-3xl font-extrabold text-indigo-700">Halo, ${esc(U.nama)}!</h1>
+    <p class="text-slate-600">Latihan selesai: <b>${sel}</b>${aktif ? ` · ada <b>${aktif}</b> latihan yang belum selesai` : ''}</p>
+    <div class="grid sm:grid-cols-2 gap-4 mt-6">
+      <button onclick="belajar()" class="p-6 rounded-3xl bg-gradient-to-br from-amber-300 to-orange-400 shadow-lg hover:scale-105 transition text-white"><i class="fa-solid fa-lightbulb text-4xl"></i><div class="text-2xl font-extrabold mt-2">Belajar & Pahami</div><div class="text-sm">25 contoh soal + pembahasan</div></button>
+      <button onclick="menuLatihan()" class="p-6 rounded-3xl bg-gradient-to-br from-sky-400 to-indigo-500 shadow-lg hover:scale-105 transition text-white"><i class="fa-solid fa-pencil text-4xl"></i><div class="text-2xl font-extrabold mt-2">Latihan Soal</div><div class="text-sm">Boleh diulang berkali-kali</div></button>
+    </div><button onclick="keluar()" class="mt-6 text-sm underline text-slate-500">Bukan ${esc(U.nama)}? Ganti nama</button>
+    <p class="text-xs text-slate-400 mt-2">Penyimpanan: ${MODE==='cloud'?'☁️ server (bisa dibuka dari perangkat mana pun)':'💻 di perangkat ini saja'}</p></div>`);
+}
+async function masuk() {
+  const n = document.getElementById('nm').value.trim().replace(/\s+/g, ' ');
+  if (n.length < 2 || !norm(n)) return alert('Tulis namamu dulu ya (minimal 2 huruf).');
+  U = (await loadSiswa(n)) || { nama:n, pb:[], att:[] };
+  localStorage.setItem('nama_terakhir', U.nama); sessionStorage.setItem('nama', U.nama);
+  await saveSiswa(); beranda();
+}
+function keluar() { U = A = null; sessionStorage.removeItem('nama'); beranda(); }
+
+/* ===== BAGIAN 1: BELAJAR ===== */
+function belajar() {
+  go(`<h2 class="text-2xl font-extrabold mb-4">💡 Belajar & Pahami <span class="text-sm font-semibold text-slate-500">(25 soal)</span></h2>` +
+    CONTOH.map((q, i) => card(`
+      <div class="flex items-center gap-2 mb-2"><span class="bg-indigo-500 text-white font-extrabold rounded-full w-9 h-9 grid place-items-center">${i+1}</span>${badge(q.topik)}${U.pb.includes(q.id)?'<span class="text-emerald-600 text-sm"><i class="fa-solid fa-check"></i> sudah dibahas</span>':''}</div>
+      <p class="text-lg font-semibold">${fmt(q.pertanyaan)}</p>${visual(q)}
+      <div class="grid grid-cols-2 gap-2 my-3">${q.pilihan.map((p,j)=>`<div class="bg-slate-100 rounded-xl px-3 py-2"><b>${L[j]}.</b> ${fmt(p)}</div>`).join('')}</div>
+      <button onclick="bahas(${i},this)" class="px-4 py-2 rounded-full bg-emerald-400 hover:bg-emerald-500 text-white font-bold"><i class="fa-solid fa-eye"></i> Lihat Pembahasan</button>
+      <div id="bahas${i}" class="langkah mt-3 space-y-2"></div>`)).join(''));
+}
+function bahas(i, btn) {
+  const box = document.getElementById('bahas' + i), q = CONTOH[i];
+  if (box.innerHTML) { box.innerHTML = ''; btn.innerHTML = '<i class="fa-solid fa-eye"></i> Lihat Pembahasan'; return; }
+  btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i> Tutup Pembahasan';
+  box.innerHTML = q.pembahasan_langkah.map((s, k) =>
+    `<div class="step bg-emerald-50 border-l-4 border-emerald-400 rounded-xl p-3" style="animation-delay:${k*0.7}s"><b class="!bg-emerald-200 !text-emerald-800">Langkah ${k+1}</b> ${fmt(s)}</div>`).join('') +
+    `<div class="step bg-yellow-100 rounded-xl p-3 font-extrabold" style="animation-delay:${q.pembahasan_langkah.length*0.7}s">✅ Jawaban: ${L[q.jawaban_benar]}. ${fmt(q.pilihan[q.jawaban_benar])}</div>`;
+  if (!U.pb.includes(q.id)) { U.pb.push(q.id); saveSiswa(); }
+}
+
+/* ===== BAGIAN 2: LATIHAN (boleh berkali-kali, bisa dilanjutkan) ===== */
+function menuLatihan() {
+  go(`<h2 class="text-2xl font-extrabold mb-1">✏️ Pilih Paket Latihan</h2>
+    <p class="text-sm text-slate-600 mb-4">Skor: benar <b>+4</b>, salah <b>−1</b>. Nilai maksimal ${PAKET[0].soal.length*4}.</p>` +
+    PAKET.map((p, i) => {
+      const at = U.att.filter(a => a.p === i), aktif = at.find(a => !a.done), sel = at.filter(a => a.done);
+      const best = sel.length ? Math.max(...sel.map(a => a.skor)) : '-';
+      const done = aktif ? aktif.jaw.filter(x => x != null).length : 0;
+      return `<div class="rounded-3xl bg-gradient-to-r ${p.warna} text-white shadow-lg p-5 mb-5">
+        <div class="text-2xl font-extrabold">${p.nama}</div><div class="text-sm">${p.soal.length} soal · selesai ${sel.length}× · skor terbaik ${best}</div>
+        <div class="flex flex-wrap gap-2 mt-3">
+          ${aktif ? `<button onclick="lanjut(${i})" class="px-5 py-2 rounded-full bg-white text-slate-800 font-bold">▶ Lanjutkan (${done}/${p.soal.length})</button>
+                     <button onclick="if(confirm('Mulai baru? Latihan yang belum selesai akan dihapus.'))mulai(${i},true)" class="px-4 py-2 rounded-full bg-black/20 font-bold">Mulai Baru</button>`
+                   : `<button onclick="mulai(${i})" class="px-5 py-2 rounded-full bg-white text-slate-800 font-bold">Mulai</button>`}</div>
+        ${sel.length ? `<div class="mt-3 text-sm bg-white/25 rounded-2xl p-2"><b>Riwayat:</b>` + sel.map((a,k)=>`<button onclick="lihat(${a.id})" class="underline mr-3">#${k+1}: ${a.skor} (${tgl(a.selesai).split(',')[0]})</button>`).join('') + `</div>` : ''}</div>`;
+    }).join(''));
+}
+function mulai(p, baru) {
+  if (baru) U.att = U.att.filter(a => !(a.p === p && !a.done));
+  A = { id: Date.now(), p, i: 0, jaw: Array(PAKET[p].soal.length).fill(null), mulai: Date.now(), done: false };
+  U.att.push(A); saveSiswa(); tampil();
+}
+function lanjut(p) { A = U.att.find(a => a.p === p && !a.done); if (A.jaw[A.i] != null && A.i < A.jaw.length - 1 && false) A.i++; tampil(); }
+function tampil() {
+  const soal = PAKET[A.p].soal, q = soal[A.i], n = soal.length, last = A.i === n - 1;
+  go(`<div class="mb-3"><div class="flex justify-between text-sm font-bold"><span>${PAKET[A.p].nama} · ${esc(U.nama)}</span><span>Soal ${A.i+1} / ${n}</span></div>
+    <div class="h-3 bg-white rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r from-pink-400 to-indigo-500 transition-all" style="width:${(A.i+1)/n*100}%"></div></div></div>` +
+    card(`<div class="mb-2">${badge(q.topik)}</div><p class="text-xl font-semibold">${fmt(q.pertanyaan)}</p>${visual(q)}
+      <div class="grid gap-3 mt-4">${q.pilihan.map((p, j) => `<button onclick="pilih(${j})" class="text-left px-4 py-3 rounded-2xl border-4 font-semibold transition ${A.jaw[A.i]===j?'border-indigo-500 bg-indigo-100':'border-slate-200 bg-white hover:border-indigo-300'}"><b class="mr-2">${L[j]}.</b>${fmt(p)}</button>`).join('')}</div>`) +
+    `<div class="flex justify-between"><button ${A.i?'':'disabled'} onclick="A.i--;saveSiswa();tampil()" class="px-5 py-2 rounded-full bg-slate-300 font-bold disabled:opacity-40"><i class="fa-solid fa-arrow-left"></i> Kembali</button>
+     <button ${A.jaw[A.i]==null?'disabled':''} onclick="${last?'selesai()':'A.i++;saveSiswa();tampil()'}" class="px-5 py-2 rounded-full bg-indigo-500 text-white font-bold disabled:opacity-40">${last?'Selesai 🏁':'Lanjut <i class="fa-solid fa-arrow-right"></i>'}</button></div>
+     <p class="text-center text-xs text-slate-500 mt-3">Jawabanmu tersimpan otomatis. Kamu boleh berhenti dan melanjutkan nanti.</p>`);
+}
+function pilih(j) { A.jaw[A.i] = j; saveSiswa(); tampil(); }
+function selesai() {
+  if (A.jaw.some(x => x == null)) { A.i = A.jaw.findIndex(x => x == null); alert('Masih ada soal yang belum dijawab.'); return tampil(); }
+  Object.assign(A, hitung(A), { done: true, selesai: Date.now() }); saveSiswa(); hasil(A);
+}
+function lihat(id) { hasil(U.att.find(a => a.id === id)); }
+
+/* ===== BAGIAN 3: HASIL & EVALUASI ===== */
+function hasil(a) {
+  A = a; const h = hitung(a), err = kesalahan(a), st = statTopik(a), n = a.jaw.length;
+  const kuat = st.map((s,i) => s.t && s.b === s.t ? TOPIK[i] : null).filter(Boolean), lemah = lemahTopik(a);
+  const maks = n * 4, skor = h.skor;
+  let fb = skor >= maks*.9 ? '🏆 Luar biasa! Kamu siap jadi juara olimpiade!' : skor >= maks*.7 ? '🌟 Bagus sekali! Sedikit lagi sempurna.' : skor >= maks*.4 ? '💪 Lumayan! Terus berlatih, kamu pasti bisa naik.' : '🌱 Jangan menyerah! Mulai dari modul Belajar & Pahami ya.';
+  if (kuat.length) fb += ` Wah, ${kuat.join(', ')} kamu sudah hebat!`;
+  if (lemah.length) fb += ` Tapi kamu masih perlu banyak berlatih di materi ${lemah.join(' dan ')} ya!`;
+  go(card(`<div class="text-center"><div class="text-6xl">${skor>=maks*.7?'🎉':'📚'}</div>
+      <div class="text-sm text-slate-500">Skor akhir ${PAKET[a.p].nama} · ${esc(U.nama)}</div>
+      <div class="text-6xl font-extrabold text-indigo-600 my-1">${skor}</div>
+      <div class="font-bold">Benar ${h.benar} × 4 = +${h.benar*4} · Salah ${h.salah} × (−1) = −${h.salah}</div></div>`) +
+    card(`<h3 class="font-extrabold text-lg mb-2">🔎 Analisis Kesalahan</h3>` + (err.length ? `<div class="overflow-x-auto"><table class="dt"><tr><th>Soal no.</th><th>Topik</th><th>Jawabanmu</th><th>Jawaban benar</th></tr>` +
+      err.map(e => `<tr><td><b>${e.no}</b></td><td>${TOPIK[e.topik]}</td><td class="text-rose-600">${L[e.pil]}</td><td class="text-emerald-600">${L[e.kunci]}</td></tr>`).join('') + `</table></div>
+      <p class="mt-3">Kamu salah di soal nomor <b>${err.map(e=>e.no).join(', ')}</b>.${lemah.length ? ` Topik yang perlu didalami: <b>${lemah.join(', ')}</b>.` : ''}</p>` : '<p>Semua jawabanmu benar! 🎯</p>')) +
+    card(`<h3 class="font-extrabold text-lg mb-2">📊 Ketepatan per Topik</h3><div class="space-y-2">${st.map((s,i)=>`<div><div class="flex justify-between text-sm font-semibold"><span>${TOPIK[i]}</span><span>${s.b}/${s.t}</span></div>
+      <div class="h-3 bg-slate-200 rounded-full"><div class="h-full rounded-full ${s.b/s.t>=.7?'bg-emerald-400':'bg-rose-400'}" style="width:${s.b/s.t*100}%"></div></div></div>`).join('')}</div>`) +
+    card(`<h3 class="font-extrabold text-lg mb-1">💬 Pesan untukmu</h3><p>${fb}</p>`) +
+    `<div class="flex flex-wrap gap-3 justify-center"><button onclick="mulai(${a.p})" class="px-5 py-3 rounded-full bg-amber-400 font-bold"><i class="fa-solid fa-rotate-right"></i> Ulangi Latihan</button>
+     <button onclick="menuLatihan()" class="px-5 py-3 rounded-full bg-sky-500 text-white font-bold"><i class="fa-solid fa-shuffle"></i> Coba Paket Lain</button>
+     <button onclick="belajar()" class="px-5 py-3 rounded-full bg-emerald-500 text-white font-bold"><i class="fa-solid fa-lightbulb"></i> Buka Pembahasan</button></div>`);
+}
+
+/* ===== REKAP GURU ===== */
+function guru() {
+  go(card(`<h2 class="text-xl font-extrabold mb-2">🔐 Rekap Guru</h2><p class="text-sm text-slate-600 mb-3">Masukkan kode guru.</p>
+    <input id="kd" type="password" class="border-4 border-slate-200 rounded-2xl px-4 py-2" placeholder="Kode" onkeydown="if(event.key==='Enter')bukaGuru()">
+    <button onclick="bukaGuru()" class="ml-2 px-5 py-2 rounded-full bg-indigo-500 text-white font-bold">Buka</button>`));
+}
+async function bukaGuru() {
+  const kode = document.getElementById('kd').value; let data;
+  if (MODE === 'cloud') { try { data = await api({act:'all', kode}); } catch(e) { return alert('Kode salah atau server tidak merespons.'); } }
+  else {
+    if (kode !== KODE_LOKAL) return alert('Kode salah.');
+    data = Object.keys(localStorage).filter(k => k.startsWith('s_')).map(k => JSON.parse(localStorage.getItem(k)));
+  }
+  rekap((data || []).filter(Boolean));
+}
+function rekap(data) {
+  window._rekap = data;
+  const baris = data.map(s => {
+    const sel = s.att.filter(a => a.done), akt = s.att.filter(a => !a.done);
+    const last = s.att.length ? Math.max(...s.att.map(a => a.selesai || a.mulai)) : 0;
+    const best = sel.length ? Math.max(...sel.map(a => a.skor)) : '-';
+    const rinci = s.att.slice().sort((x,y)=>y.mulai-x.mulai).map(a => {
+      const h = hitung(a), err = kesalahan(a);
+      return `<tr><td>${PAKET[a.p].nama}</td><td>${tgl(a.mulai)}</td><td>${a.done?'Selesai':`Belum (${a.jaw.filter(x=>x!=null).length}/${a.jaw.length})`}</td>
+        <td>${h.benar}/${h.salah}</td><td><b>${h.skor}</b></td><td class="text-xs">${err.length?err.map(e=>`no.${e.no} (${TOPIK[e.topik]})`).join('; '):'-'}</td></tr>`;
+    }).join('');
+    return `<details class="border-b py-2"><summary class="cursor-pointer font-semibold grid grid-cols-[1fr_auto_auto_auto] gap-3"><span>${esc(s.nama)}</span><span>${sel.length}× selesai</span><span>${akt.length?'⏳'+akt.length:''}</span><span>terbaik ${best}</span></summary>
+      <div class="text-xs text-slate-500 my-1">Aktivitas terakhir: ${tgl(last)} · Pembahasan dibuka: ${(s.pb||[]).length}/25</div>
+      <div class="overflow-x-auto"><table class="dt"><tr><th>Paket</th><th>Mulai</th><th>Status</th><th>Benar/Salah</th><th>Skor</th><th>Soal salah (topik)</th></tr>${rinci || '<tr><td colspan=6>Belum latihan</td></tr>'}</table></div></details>`;
+  }).join('');
+  go(card(`<div class="flex flex-wrap justify-between items-center gap-2 mb-3"><h2 class="text-xl font-extrabold">📋 Rekap Siswa (${data.length})</h2>
+    <button onclick="unduhCSV()" class="px-4 py-2 rounded-full bg-emerald-500 text-white font-bold"><i class="fa-solid fa-download"></i> Unduh CSV</button></div>
+    <p class="text-xs text-slate-500 mb-2">Mode: ${MODE==='cloud'?'server (semua perangkat)':'lokal (hanya siswa di perangkat ini)'}. Klik nama untuk melihat rincian.</p>${baris || 'Belum ada data siswa.'}`));
+}
+function unduhCSV() {
+  const rows = [['Nama','Paket','Mulai','Selesai','Status','Benar','Salah','Skor','Soal salah','Topik perlu didalami']];
+  (window._rekap || []).forEach(s => s.att.forEach(a => { const h = hitung(a), e = kesalahan(a);
+    rows.push([s.nama, PAKET[a.p].nama, tgl(a.mulai), tgl(a.selesai), a.done?'Selesai':'Belum', h.benar, h.salah, h.skor, e.map(x=>x.no).join(' '), lemahTopik(a).join(' | ')]); }));
+  const csv = '\ufeff' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); l.download = 'rekap-siswa.csv'; l.click();
+}
+
+/* ===== START ===== */
+(async () => {
+  try { await api({act:'ping'}); MODE = 'cloud'; } catch(e) { MODE = 'local'; }
+  const n = sessionStorage.getItem('nama');
+  if (n) { U = await loadSiswa(n); }
+  beranda();
+})();
+</script>
+</body>
+</html>
